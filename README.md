@@ -1,4 +1,4 @@
-##Chess engine implemented in Julia##
+### Chess engine implemented in Julia
 
 - [x] Minimax
 - [x] Alpha Betha pruning
