@@ -3,48 +3,49 @@
 
 using Printf
 using Chess
-include("./PieceBordValues.jl")
+using BenchmarkTools
+include("./PieceValueMatrices.jl")
 
-function evaluationFunction(board)
+function evaluationFunction(board::Chess.Board)::Float64
     if ischeckmate(board)
         if sidetomove(board) == Chess.BLACK
-            return Inf16
+            return 10000.0
         end
         if sidetomove(board) == Chess.WHITE
-            return -Inf16
+            return -10000.0
         end
         if isdraw(board)
             return 0
         end
     end
 
-    whitePawns = length(squares(pawns(board, Chess.WHITE)))
-    whiteRooks = length(squares(rooks(board, Chess.WHITE)))
-    whiteKnights = length(squares(knights(board, Chess.WHITE)))
-    whiteBishops = length(squares(bishops(board, Chess.WHITE)))
-    whiteQueens = length(squares(queens(board, Chess.WHITE)))
+    whitePawns = sum(toarray(pawns(board, Chess.WHITE)).*whitePawnValues)
+    whiteRooks = sum(toarray(rooks(board, Chess.WHITE)).*whiteRookValues)
+    whiteKnights = sum(toarray(knights(board, Chess.WHITE)).*whiteKnightValues)
+    whiteBishops = sum(toarray(bishops(board, Chess.WHITE)).*whiteBishopValues)
+    whiteQueens = sum(toarray(queens(board, Chess.WHITE)).*whiteQueenValues)
 
-    blackPawns = length(squares(pawns(board, Chess.BLACK)))
-    blackRooks = length(squares(rooks(board, Chess.BLACK)))
-    blackKnights = length(squares(knights(board, Chess.BLACK)))
-    blackBishops = length(squares(bishops(board, Chess.BLACK)))
-    blackQueens = length(squares(queens(board, Chess.BLACK)))
+    blackPawns = sum(toarray(pawns(board, Chess.BLACK)).*blackPawnValues)
+    blackRooks = sum(toarray(rooks(board, Chess.BLACK)).*blackRookValues)
+    blackKnights = sum(toarray(knights(board, Chess.BLACK)).*blackKnightValues)
+    blackBishops = sum(toarray(bishops(board, Chess.BLACK)).*blackBishopValues)
+    blackQueens = sum(toarray(queens(board, Chess.BLACK)).*blackQueenValues)
 
-    whiteScore = whitePawns*100 + whiteKnights*320 + whiteBishops*330 + whiteRooks*500 + whiteQueens*900
-    blackScore = blackPawns*100 + blackKnights*320 + blackBishops*330 + blackRooks*500 + blackQueens*900
+    whiteScore = whitePawns + whiteRooks + whiteKnights + whiteBishops + whiteQueens
+    blackScore = blackPawns + blackRooks + blackKnights + blackBishops + blackQueens
 
     return whiteScore - blackScore
 end
 
-function minimax(board, depth, alpha, betha)
+function minimax(board::Chess.Board, depth::Int64, alpha::Float64, betha::Float64)::Tuple{Float64, Chess.Move}
     if depth == 0 || isterminal(board)
-        return evaluationFunction(board), nothing
+        return evaluationFunction(board), moves(board)[1]
     end
     legalMoves = moves(board)
 
     if sidetomove(board) == Chess.WHITE
-        bestMove = nothing
-        bestEval = -Inf16
+        bestMove = legalMoves[1]::Chess.Move
+        bestEval = -10000.0
 
         for currentMove in legalMoves
             currentBoard = domove(board, currentMove)
@@ -61,8 +62,8 @@ function minimax(board, depth, alpha, betha)
         end
         return bestEval, bestMove
     else
-        bestMove = nothing
-        bestEval = Inf16
+        bestMove = legalMoves[1]::Chess.Move
+        bestEval = 10000.0
         for currentMove in legalMoves
             currentBoard = domove(board, currentMove)
             currentEval, move = minimax(currentBoard, depth-1, alpha, betha)
@@ -80,6 +81,50 @@ function minimax(board, depth, alpha, betha)
     end
 end
 
+function improvedMiniMax(board, depth, alpha, betha)
+    if depth == 0 || isterminal(board)
+        return evaluationFunction(board)
+    end
+    legalMoves = moves(board)
+
+    if sidetomove(board) == Chess.WHITE
+        bestMove = legalMoves[1]
+        bestEval = -10000.0
+
+        for currentMove in legalMoves
+            currentBoard = domove(board, currentMove)
+            currentEval  = improvedMiniMax(currentBoard, depth-1, alpha, betha)
+
+            if currentEval > bestEval
+                bestMove = currentMove
+                bestEval = currentEval
+            end
+            alpha = max(alpha, currentEval)
+            if alpha >= betha
+                break
+            end
+        end
+        return bestEval
+    else
+        bestMove = legalMoves[1]
+        bestEval = 10000.0
+        for currentMove in legalMoves
+            currentBoard = domove(board, currentMove)
+            currentEval = improvedMiniMax(currentBoard, depth-1, alpha, betha)
+
+            if currentEval < bestEval
+                bestEval = currentEval
+                bestMove = currentMove
+            end
+            betha = min(betha, currentEval)
+            if alpha >= betha
+                break
+            end
+        end
+        return bestEval
+    end
+end
+
 function playGame()
     board = startboard()
     playOn = true
@@ -93,20 +138,28 @@ function playGame()
         if userMoveString == "exit"
             break
         end
+        try
+            userMove = movefromstring(userMoveString)
+            domove!(board, userMove)
 
-        userMove = movefromstring(userMoveString)
-        domove!(board, userMove)
-
-        computerEval, computerMove = minimax(board, depth, -Inf16, Inf16)
-        domove!(board, computerMove)
-        println(board)
-        print("Current Evaluation: ")
-        println(computerEval)
-        println("-----------------------")
+            computerEval, computerMove = minimax(board, depth, -10000.0, 10000.0)
+            domove!(board, computerMove)
+            println(board)
+            println("Best move: ", computerMove)
+            println("Current Evaluation: ", computerEval)
+            println("-----------------------")
+        catch
+            println("Illegal move. Try again.")
+            donullmove!(board)
+        end
     end
 end
 
-playGame()
+# playGame()
+board = fromfen("6r1/p3k2p/2npbp2/1pB1p1Q1/2PPB3/5q2/PKP2P2/8 w - - 3 26")
+# improvedMiniMax(board, 2, -10000.0, 10000.0)
+@time minimax(board, 4, -10000.0, 10000.0)
+@time minimax(board, 4, -10000.0, 10000.0)
 
 # checkMateBoard = fromfen("r1bqkbnr/ppp2Qpp/2np4/4p3/2B1P3/8/PPPP1PPP/RNB1K1NR b KQkq - 0 1")
 # startBoard = startboard()
